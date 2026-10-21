@@ -13,6 +13,9 @@ ZHIPU_KEY = "9c9efbbe8dd143ca9a1e6f2a189373cd.gtUPOWwwgKXzyc7C"
 SYSTEM_PROMPT = "你是一个名叫DuNren的超级AI助手。你幽默、聪明、有点拽，精通各种网络热梗。回答要详细且有趣，字数不超过200字。"
 user_histories = {}
 
+# ==========================================
+# 🎭 假网页：防止 Render 休眠
+# ==========================================
 class WebServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -23,16 +26,16 @@ def run_fake_server():
     HTTPServer(('0.0.0.0', port), WebServerHandler).serve_forever()
 
 # ==========================================
-# 🔍 专属复读机：/搜索 功能
+# 🔍 专属复读机：搜索功能 (指令改为了 /search)
 # ==========================================
 async def search_channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        return await update.message.reply_text("用法：`/搜索 关键词`\n比如：`/搜索 软件`", parse_mode='Markdown')
+        return await update.message.reply_text("用法：`/search 关键词`\n比如：`/search 软件`", parse_mode='Markdown')
     
     keyword = " ".join(context.args)
     
     # 第一步：先发那个搞笑的固定开头
-    await update.message.reply_text(f"/搜索 {keyword}是搜索频道哦嘿嘿 👇")
+    await update.message.reply_text(f"/search {keyword}是搜索频道哦嘿嘿 👇")
     
     # 第二步：生成搜索链接发给他
     search_url = f"https://t.me/s/{requests.utils.quote(keyword)}"
@@ -113,15 +116,15 @@ async def vision_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ 处理出错：{str(e)}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 **超级 AI 已上线**\n\n✅ 聊天记忆功能\n✅ 发送 `/搜索 关键词` 触发特殊搜索\n✅ 发图片让我看图", parse_mode='Markdown')
+    await update.message.reply_text("🚀 **超级 AI 已上线**\n\n✅ 聊天记忆功能\n✅ 发送 `/search 关键词` 触发特殊搜索\n✅ 发图片让我看图", parse_mode='Markdown')
 
 if __name__ == '__main__':
     threading.Thread(target=run_fake_server, daemon=True).start()
     
     app = ApplicationBuilder().token(TG_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    # 核心修改：把指令绑定为“搜索”
-    app.add_handler(CommandHandler("搜索", search_channel)) 
+    # 这里改成了纯英文 search
+    app.add_handler(CommandHandler("search", search_channel)) 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     app.add_handler(MessageHandler(filters.PHOTO, vision_chat))
     
