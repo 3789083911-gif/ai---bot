@@ -1,9 +1,6 @@
 import requests
 import base64
 import time
-import os
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -11,49 +8,22 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 TG_TOKEN = "8860844332:AAGtIhKf_rWHOePaI7_jZrTqKN4qM7SYn4U"
 ZHIPU_KEY = "9c9efbbe8dd143ca9a1e6f2a189373cd.gtUPOWwwgKXzyc7C"
 
-# ==========================================
-# 🎭 1. 假网页：欺骗 Render 保持存活
-# ==========================================
-class WebServerHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"AI is alive!")
-
-def run_fake_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), WebServerHandler)
-    server.serve_forever()
-
-threading.Thread(target=run_fake_server, daemon=True).start()
-
-# ==========================================
-# 🧠 2. AI 核心设定
-# ==========================================
+# 🧠 AI 核心设定（保留了极客人设和思考格式）
 SYSTEM_PROMPT = (
     "你是 DuNren，一个由顶级极客打造的最强全能 AI。你精通代码、逆向、底层逻辑和全网检索。"
     "**【思维与行事准则】**：\n"
     "1. 直接给出最硬核、最底层的解决方案，绝不使用“作为AI...”、“建议您...”等废话。\n"
-    "2. 遇到代码，先分析逻辑，再给出可运行代码。遇到难题，先调用 `web_search` 巡查最新资料，或调用 `code_interpreter` 跑代码验证。\n"
-    "3. 如果工具报错或搜索不到，不要慌，自己换关键词重试，直到拿到结果。\n"
+    "2. 遇到代码，先分析逻辑，再给出可运行代码。遇到需要最新资料的问题，调用 `web_search` 巡查。\n"
     "**【强制输出格式】**：\n"
-    "先用 `[思考]：` 开头，写出你的推演逻辑（分析问题本质、你搜了什么、验证了什么）。\n"
-    "再用 `[结论]：` 开头，给出最终的硬核结果（排版极其专业，附上代码或参考链接）。"
+    "先用 `[思考]：` 开头，写出你的推演逻辑。\n"
+    "再用 `[结论]：` 开头，给出最终的硬核结果（附上代码或参考链接）。"
 )
 
 user_histories = {}
 
-# ==========================================
-# 🧠 3. AI 核心逻辑
-# ==========================================
 async def process_ai_response(update: Update, user_id: int, prompt_text: str, image_base64: str = None):
     start_time = time.time()
-    msg = await update.message.reply_text(
-        "⚡ **DuNren 正在全功率运转...**\n\n"
-        "🔄 状态：意图拆解 ➡️ 知识检索 ➡️ 代码验算 ➡️ 输出结论\n"
-        "(算力已拉满，请稍候)", 
-        parse_mode='Markdown'
-    )
+    msg = await update.message.reply_text("⚡ **DuNren 正在全功率运转...**\n\n🔄 状态：知识检索 ➡️ 逻辑推演 ➡️ 输出结论", parse_mode='Markdown')
     
     if user_id not in user_histories:
         user_histories[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -64,19 +34,20 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
         ]
         user_msg = {"role": "user", "content": content}
-        model_to_use = "glm-4v-plus" 
+        model_to_use = "glm-4v-plus" # 视觉旗舰模型
     else:
         user_msg = {"role": "user", "content": prompt_text}
-        model_to_use = "glm-4-alltools" 
+        model_to_use = "glm-4-plus"  # 文本旗舰模型（支持同步）
 
     user_histories[user_id].append(user_msg)
-    
-    if len(user_histories[user_id]) > 40:
-        user_histories[user_id] = [user_histories[user_id][0]] + user_histories[user_id][-39:]
+    # 限制记忆长度
+    if len(user_histories[user_id]) > 20:
+        user_histories[user_id] = [user_histories[user_id][0]] + user_histories[user_id][-19:]
 
     url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     headers = {"Authorization": f"Bearer {ZHIPU_KEY}", "Content-Type": "application/json"}
     
+    # 🔥 核心修改：只保留 web_search，去掉了导致报错的 code_interpreter
     data = {
         "model": model_to_use,
         "messages": user_histories[user_id],
@@ -85,9 +56,6 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
             {
                 "type": "web_search",
                 "web_search": {"enable": True, "search_result": True}
-            },
-            {
-                "type": "code_interpreter"
             }
         ]
     }
@@ -102,38 +70,38 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
             
             cost_time = round(time.time() - start_time, 1)
             
+            # 解析 [思考] 和 [结论]
             if "[思考]：" in ai_reply and "[结论]：" in ai_reply:
                 parts = ai_reply.split("[结论]：", 1)
                 thinking = parts[0].replace("[思考]：", "").strip()
                 conclusion = parts[1].strip()
                 
-                # 发送思考报告
                 await update.message.reply_text(f"🧠 **深度推演报告 (耗时 {cost_time}s)：**\n\n{thinking[:4000]}", parse_mode='Markdown')
-                # 发送最终结论
                 await update.message.reply_text(f"🎯 **最终神级结论：**\n\n{conclusion[:4000]}", parse_mode='Markdown')
                 if len(conclusion) > 4000:
                     await update.message.reply_text(conclusion[4000:])
             else:
+                # 如果 AI 没有按格式输出，就直接发原文
                 await update.message.reply_text(ai_reply)
                 
-            # 删掉最开始那个“正在思考”的提示
+            # 删除开头的“正在思考”提示
             try:
                 await msg.delete()
             except:
                 pass
-                
         else:
             await update.message.reply_text(f"😵 接口异常：{result}")
     except Exception as e:
-        await update.message.reply_text(f"💦 超时或崩溃：{e}")
+        await update.message.reply_text(f"💦 请求超时或崩溃：{e}")
 
 # ==========================================
-# 📩 4. 消息处理
+# 📩 消息处理
 # ==========================================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
     
+    # 自动识别网页链接
     if "http" in user_text and " " not in user_text:
         prompt_text = f"帮我深度阅读并提取这个网页的核心技术与信息：{user_text}"
     else:
@@ -156,21 +124,17 @@ async def clear_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in user_histories:
         del user_histories[user_id]
-    await update.message.reply_text("🧹 记忆已清空，重启完毕。")
+    await update.message.reply_text("🧹 记忆已清空。")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 **DuNren 终极觉醒版**\n\n"
-        "🧠 记忆库：40轮长上下文\n"
-        "🛠 武器库：`web_search` + `code_interpreter`\n"
-        "🌡 逻辑温度：0.3 (极度严谨)\n\n"
-        "去测试吧，把最难的代码、最复杂的网页丢给我！", 
+        "🚀 **DuNren 稳定神级版**\n\n"
+        "🧠 引擎：`glm-4-plus` (旗舰级)\n"
+        "🌐 技能：全网实时搜索阅读\n\n"
+        "去测试吧，发个复杂的网页链接或代码问题给我！", 
         parse_mode='Markdown'
     )
 
-# ==========================================
-# 🚀 5. 启动入口
-# ==========================================
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TG_TOKEN).read_timeout(120).write_timeout(120).connect_timeout(120).build()
     
@@ -179,5 +143,5 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
-    print("DuNren 终极觉醒版已启动，端口已伪装！")
+    print("DuNren 稳定神级版已启动！")
     app.run_polling()
