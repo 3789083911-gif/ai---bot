@@ -12,7 +12,7 @@ TG_TOKEN = "8860844332:AAGtIhKf_rWHOePaI7_jZrTqKN4qM7SYn4U"
 ZHIPU_KEY = "9c9efbbe8dd143ca9a1e6f2a189373cd.gtUPOWwwgKXzyc7C"
 
 # ==========================================
-# 🎭 1. 假网页：欺骗 Render 保持存活 (核心修复)
+# 🎭 1. 假网页：欺骗 Render 保持存活
 # ==========================================
 class WebServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -25,7 +25,6 @@ def run_fake_server():
     server = HTTPServer(('0.0.0.0', port), WebServerHandler)
     server.serve_forever()
 
-# 在后台启动假网页
 threading.Thread(target=run_fake_server, daemon=True).start()
 
 # ==========================================
@@ -108,18 +107,25 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
                 thinking = parts[0].replace("[思考]：", "").strip()
                 conclusion = parts[1].strip()
                 
-                await msg.delete()
+                # 发送思考报告
                 await update.message.reply_text(f"🧠 **深度推演报告 (耗时 {cost_time}s)：**\n\n{thinking[:4000]}", parse_mode='Markdown')
+                # 发送最终结论
                 await update.message.reply_text(f"🎯 **最终神级结论：**\n\n{conclusion[:4000]}", parse_mode='Markdown')
                 if len(conclusion) > 4000:
                     await update.message.reply_text(conclusion[4000:])
             else:
-                await msg.delete()
                 await update.message.reply_text(ai_reply)
+                
+            # 删掉最开始那个“正在思考”的提示
+            try:
+                await msg.delete()
+            except:
+                pass
+                
         else:
-            await msg.edit_text(f"😵 接口异常：{result}")
+            await update.message.reply_text(f"😵 接口异常：{result}")
     except Exception as e:
-        await msg.edit_text(f"💦 超时或崩溃：{e}")
+        await update.message.reply_text(f"💦 超时或崩溃：{e}")
 
 # ==========================================
 # 📩 4. 消息处理
@@ -166,7 +172,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🚀 5. 启动入口
 # ==========================================
 if __name__ == '__main__':
-    # 这里的 120 秒超时是给 AI 思考留的时间
     app = ApplicationBuilder().token(TG_TOKEN).read_timeout(120).write_timeout(120).connect_timeout(120).build()
     
     app.add_handler(CommandHandler("start", start))
