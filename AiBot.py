@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 TG_TOKEN = "8860844332:AAGtIhKf_rWHOePaI7_jZrTqKN4qM7SYn4U"
 ZHIPU_KEY = "9c9efbbe8dd143ca9a1e6f2a189373cd.gtUPOWwwgKXzyc7C"
 
-# 🧠 AI 核心设定（保留了极客人设和思考格式）
+# 🧠 AI 核心设定
 SYSTEM_PROMPT = (
     "你是 DuNren，一个由顶级极客打造的最强全能 AI。你精通代码、逆向、底层逻辑和全网检索。"
     "**【思维与行事准则】**：\n"
@@ -23,7 +23,8 @@ user_histories = {}
 
 async def process_ai_response(update: Update, user_id: int, prompt_text: str, image_base64: str = None):
     start_time = time.time()
-    msg = await update.message.reply_text("⚡ **DuNren 正在全功率运转...**\n\n🔄 状态：知识检索 ➡️ 逻辑推演 ➡️ 输出结论", parse_mode='Markdown')
+    # 这里改成了你要求的文案
+    msg = await update.message.reply_text("🧠 DuNren 正在思考...\n\n🔄 状态：知识检索 ➡️ 逻辑推演 ➡️ 输出结论")
     
     if user_id not in user_histories:
         user_histories[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -34,20 +35,18 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
         ]
         user_msg = {"role": "user", "content": content}
-        model_to_use = "glm-4v-plus" # 视觉旗舰模型
+        model_to_use = "glm-4v-plus" 
     else:
         user_msg = {"role": "user", "content": prompt_text}
-        model_to_use = "glm-4-plus"  # 文本旗舰模型（支持同步）
+        model_to_use = "glm-4-plus" 
 
     user_histories[user_id].append(user_msg)
-    # 限制记忆长度
     if len(user_histories[user_id]) > 20:
         user_histories[user_id] = [user_histories[user_id][0]] + user_histories[user_id][-19:]
 
     url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
     headers = {"Authorization": f"Bearer {ZHIPU_KEY}", "Content-Type": "application/json"}
     
-    # 🔥 核心修改：只保留 web_search，去掉了导致报错的 code_interpreter
     data = {
         "model": model_to_use,
         "messages": user_histories[user_id],
@@ -70,21 +69,19 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
             
             cost_time = round(time.time() - start_time, 1)
             
-            # 解析 [思考] 和 [结论]
             if "[思考]：" in ai_reply and "[结论]：" in ai_reply:
                 parts = ai_reply.split("[结论]：", 1)
                 thinking = parts[0].replace("[思考]：", "").strip()
                 conclusion = parts[1].strip()
                 
-                await update.message.reply_text(f"🧠 **深度推演报告 (耗时 {cost_time}s)：**\n\n{thinking[:4000]}", parse_mode='Markdown')
-                await update.message.reply_text(f"🎯 **最终神级结论：**\n\n{conclusion[:4000]}", parse_mode='Markdown')
+                # 纯文本发送，去掉了所有加粗符号，防止解析报错
+                await update.message.reply_text(f"🧠 深度推演报告 (耗时 {cost_time}s)：\n\n{thinking[:4000]}")
+                await update.message.reply_text(f"📝 最终回答：\n\n{conclusion[:4000]}")
                 if len(conclusion) > 4000:
                     await update.message.reply_text(conclusion[4000:])
             else:
-                # 如果 AI 没有按格式输出，就直接发原文
                 await update.message.reply_text(ai_reply)
                 
-            # 删除开头的“正在思考”提示
             try:
                 await msg.delete()
             except:
@@ -94,14 +91,10 @@ async def process_ai_response(update: Update, user_id: int, prompt_text: str, im
     except Exception as e:
         await update.message.reply_text(f"💦 请求超时或崩溃：{e}")
 
-# ==========================================
-# 📩 消息处理
-# ==========================================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
     
-    # 自动识别网页链接
     if "http" in user_text and " " not in user_text:
         prompt_text = f"帮我深度阅读并提取这个网页的核心技术与信息：{user_text}"
     else:
@@ -111,7 +104,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text("👁️ **正在扫描图像特征...**")
+    await update.message.reply_text("👁️ 正在扫描图像特征...")
     
     photo_file = await update.message.photo[-1].get_file()
     image_bytes = await photo_file.download_as_bytearray()
@@ -124,15 +117,14 @@ async def clear_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in user_histories:
         del user_histories[user_id]
-    await update.message.reply_text("🧹 记忆已清空。")
+    await update.message.reply_text("🧹 记忆已清空，重启完毕。")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 **DuNren 稳定神级版**\n\n"
-        "🧠 引擎：`glm-4-plus` (旗舰级)\n"
+        "🚀 DuNren 终极觉醒版\n\n"
+        "🧠 引擎：glm-4-plus (旗舰级)\n"
         "🌐 技能：全网实时搜索阅读\n\n"
-        "去测试吧，发个复杂的网页链接或代码问题给我！", 
-        parse_mode='Markdown'
+        "去测试吧，把最难的代码、最复杂的网页丢给我！"
     )
 
 if __name__ == '__main__':
@@ -143,5 +135,5 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
-    print("DuNren 稳定神级版已启动！")
+    print("DuNren 终极觉醒版已启动！")
     app.run_polling()
